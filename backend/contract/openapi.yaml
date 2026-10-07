@@ -1,0 +1,827 @@
+openapi: 3.1.0
+info:
+  title: SubTrack API
+  version: 1.0.0
+  description: |
+    Multi‑tenant subscription tracker. Users manage their own subscriptions; a superadmin can manage all users and subscriptions.
+servers:
+  - url: https://api.subtrack.example.com/v1
+    description: Production server
+tags:
+  - name: auth
+    description: Authentication and account management
+  - name: subscriptions
+    description: CRUD operations for user subscriptions
+  - name: admin
+    description: Superadmin user and data administration
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+    RegisterResponse:
+      type: object
+      required: [userId, email]
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+          format: email
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      required: [userId, role]
+      properties:
+        userId:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    Subscription:
+      type: object
+      required:
+        - id
+        - name
+        - cost
+        - currency
+        - billingCycle
+        - nextRenewalDate
+        - status
+        - createdAt
+        - updatedAt
+        - userId
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        cost:
+          type: number
+          format: double
+        currency:
+          type: string
+        billingCycle:
+          $ref: '#/components/schemas/BillingCycle'
+        nextRenewalDate:
+          type: string
+          format: date-time
+        category:
+          type: string
+          nullable: true
+        cancellationUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        userId:
+          type: string
+    SubscriptionCreate:
+      type: object
+      required:
+        - name
+        - cost
+        - currency
+        - billingCycle
+        - nextRenewalDate
+      properties:
+        name:
+          type: string
+        cost:
+          type: number
+          format: double
+          minimum: 0.01
+        currency:
+          type: string
+        billingCycle:
+          $ref: '#/components/schemas/BillingCycle'
+        nextRenewalDate:
+          type: string
+          format: date
+        category:
+          type: string
+          nullable: true
+        cancellationUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          $ref: '#/components/schemas/SubscriptionStatus'
+    SubscriptionUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        cost:
+          type: number
+          format: double
+          minimum: 0.01
+        currency:
+          type: string
+        billingCycle:
+          $ref: '#/components/schemas/BillingCycle'
+        nextRenewalDate:
+          type: string
+          format: date
+        category:
+          type: string
+          nullable: true
+        cancellationUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          $ref: '#/components/schemas/SubscriptionStatus'
+    AdminUserSummary:
+      type: object
+      required: [id, email, status, subscriptionCount, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        subscriptionCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    AdminUserCreate:
+      type: object
+      required: [email, temporaryPassword]
+      properties:
+        email:
+          type: string
+          format: email
+        temporaryPassword:
+          type: string
+          minLength: 8
+    AdminUserCreated:
+      type: object
+      required: [userId, email]
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+          format: email
+    AdminUserPatch:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/UserStatus'
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    PasswordResetConfirm:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+    UserRole:
+      type: string
+      enum: [USER, SUPERADMIN]
+    UserStatus:
+      type: string
+      enum: [ACTIVE, DEACTIVATED]
+    BillingCycle:
+      type: string
+      enum: [DAILY, WEEKLY, MONTHLY, QUARTERLY, YEARLY]
+    SubscriptionStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, CANCELLED]
+paths:
+  /auth/register:
+    post:
+      operationId: auth_register
+      tags:
+        - auth
+      summary: Register a new user account
+      description: |
+        Creates a new user. Returns conflict if the email already exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+      x-stories:
+        - STORY-001
+      x-models:
+        - RegisterRequest
+        - RegisterResponse
+        - Error
+  /auth/login:
+    post:
+      operationId: auth_login
+      tags:
+        - auth
+      summary: Authenticate a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful authentication (session cookie set)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Account deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+      x-stories:
+        - STORY-002
+      x-models:
+        - LoginRequest
+        - LoginResponse
+        - Error
+  /auth/logout:
+    post:
+      operationId: auth_logout
+      tags:
+        - auth
+      summary: Log out the current session
+      responses:
+        '204':
+          description: Session terminated
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-002
+      x-models:
+        - Error
+  /auth/forgot-password:
+    post:
+      operationId: auth_forgot_password
+      tags:
+        - auth
+      summary: Request a password reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '200':
+          description: Neutral confirmation message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+      x-stories:
+        - STORY-003
+      x-models:
+        - PasswordResetRequest
+        - MessageResponse
+        - Error
+  /auth/reset-password:
+    post:
+      operationId: auth_reset_password
+      tags:
+        - auth
+      summary: Reset password using a token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirm'
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Invalid or expired token / weak password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+      x-stories:
+        - STORY-003
+      x-models:
+        - PasswordResetConfirm
+        - MessageResponse
+        - Error
+  /subscriptions:
+    get:
+      operationId: subscriptions_list
+      tags:
+        - subscriptions
+      summary: List subscriptions for the authenticated user
+      parameters:
+        - name: status
+          in: query
+          description: Filter by subscription status (all, active, paused, cancelled)
+          required: false
+          schema:
+            type: string
+            enum: [all, active, paused, cancelled]
+      responses:
+        '200':
+          description: Array of subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-004
+        - STORY-005
+        - STORY-006
+        - STORY-007
+      x-models:
+        - Subscription
+        - Error
+    post:
+      operationId: subscriptions_create
+      tags:
+        - subscriptions
+      summary: Create a new subscription for the authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionCreate'
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-004
+      x-models:
+        - SubscriptionCreate
+        - Subscription
+        - Error
+  /subscriptions/{id}:
+    put:
+      operationId: subscriptions_update
+      tags:
+        - subscriptions
+      summary: Update an existing subscription (owner or superadmin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionUpdate'
+      responses:
+        '200':
+          description: Subscription updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden – not owner nor superadmin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-005
+        - STORY-006
+        - STORY-009
+      x-models:
+        - SubscriptionUpdate
+        - Subscription
+        - Error
+    delete:
+      operationId: subscriptions_delete
+      tags:
+        - subscriptions
+      summary: Delete a subscription (owner or superadmin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Subscription deleted
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden – not owner nor superadmin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-005
+        - STORY-009
+      x-models:
+        - Error
+  /admin/users:
+    get:
+      operationId: admin_users_list
+      tags:
+        - admin
+      summary: List all users (superadmin only)
+      parameters:
+        - name: q
+          in: query
+          description: Search by email
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Array of user summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminUserSummary'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden – not superadmin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-008
+      x-models:
+        - AdminUserSummary
+        - Error
+    post:
+      operationId: admin_users_create
+      tags:
+        - admin
+      summary: Create a new user (superadmin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserCreate'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserCreated'
+        '409':
+          description: Duplicate email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden – not superadmin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-008
+      x-models:
+        - AdminUserCreate
+        - AdminUserCreated
+        - Error
+  /admin/users/{id}:
+    patch:
+      operationId: admin_users_update
+      tags:
+        - admin
+      summary: Update user status (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserPatch'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserCreated'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden – not superadmin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-008
+      x-models:
+        - AdminUserPatch
+        - AdminUserCreated
+        - Error
+    delete:
+      operationId: admin_users_delete
+      tags:
+        - admin
+      summary: Delete a user (superadmin only, cannot delete self)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User deleted
+        '400':
+          description: Bad request – cannot delete self
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden – not superadmin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-008
+      x-models:
+        - Error
+  /admin/users/{id}/subscriptions:
+    get:
+      operationId: admin_user_subscriptions_list
+      tags:
+        - admin
+      summary: List subscriptions of a specific user (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Array of subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden – not superadmin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - sessionCookie: []
+      x-stories:
+        - STORY-009
+      x-models:
+        - Subscription
+        - Error
